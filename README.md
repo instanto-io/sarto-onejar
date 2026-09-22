@@ -262,20 +262,18 @@ at the transformer:
 </plugin>
 ```
 
-Snapshots publish to GitHub Packages:
+Snapshots publish to the Instanto Maven registry:
 
 ```xml
 <repositories>
   <repository>
-    <id>github</id>
-    <url>https://maven.pkg.github.com/instanto-io/sarto-onejar</url>
+    <id>forgejo</id>
+    <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+    <releases><enabled>false</enabled></releases>
+    <snapshots><enabled>true</enabled></snapshots>
   </repository>
 </repositories>
 ```
-
-GitHub Packages requires credentials even for reads; add a matching server
-to `~/.m2/settings.xml` with your `GITHUB_ACTOR` and a token that can read
-packages.
 
 ## Build this repository
 
@@ -283,8 +281,8 @@ packages.
 ./mvnw verify
 ```
 
-The shared parent (`io.instanto:instanto-org-pom`) is installed from
-`instanto-io/instanto-poms` in CI; see `.github/workflows/build.yml`.
+CI resolves the shared parent (`io.instanto:instanto-org-pom`) from the same
+registry; see `.github/workflows/build.yml`.
 
 ## License
 

@@ -16,7 +16,9 @@ permissions:
 jobs:
   build:
     name: Verify reactor
-    runs-on: ubuntu-latest
+    # GitHub withholds package credentials from fork pull requests.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, instanto-container]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -27,23 +29,12 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-          server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: GITHUB_TOKEN
 
-      - name: Check out the shared development parent
-        uses: actions/checkout@v4
-        with:
-          repository: instanto-io/instanto-poms
-          path: .build/instanto-poms
-      - name: Install the shared development parent
-        run: mvn -B -ntp -f .build/instanto-poms/pom.xml install
       - name: Verify reactor
         run: ./mvnw --settings .github/maven-settings.xml --batch-mode --no-transfer-progress clean verify
         env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN }}
 
       - name: Upload test reports
         if: always()
@@ -55,13 +46,12 @@ jobs:
             **/target/failsafe-reports/
           if-no-files-found: ignore
 
-      - name: Publish Maven snapshot to GitHub Packages
+      - name: Publish Maven snapshot to packages.instanto.io
         if: github.event_name != 'pull_request'
         run: >-
           ./mvnw --settings .github/maven-settings.xml --batch-mode --no-transfer-progress --errors --fail-at-end
           -DskipTests
           deploy
         env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN }}

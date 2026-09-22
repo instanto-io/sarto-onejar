@@ -28,18 +28,16 @@
         </license>
     </licenses>
 
-    <distributionManagement>
+    <!-- Bootstrap the published parent and consume Instanto snapshots by Maven coordinate. -->
+    <repositories>
         <repository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/instanto-io/sarto-onejar</url>
+            <id>forgejo</id>
+            <name>Instanto snapshots</name>
+            <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+            <releases><enabled>false</enabled></releases>
+            <snapshots><enabled>true</enabled></snapshots>
         </repository>
-        <snapshotRepository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/instanto-io/sarto-onejar</url>
-        </snapshotRepository>
-    </distributionManagement>
+    </repositories>
 
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
