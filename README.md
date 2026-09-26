@@ -81,8 +81,7 @@ Those markers feed the runtime-target index
 `groupId:artifactId:version` as its origin, so conflicting indexes from two
 JARs can name their owners. A packaging test then cross-checks the artefact
 itself: every packaged class must have a matching index entry with the
-expected target, entries must be unique, and compiler tooling, mock engines,
-and application-startup services must *not* be in a library JAR at all.
+expected target, and entries must be unique.
 
 Mark **every** package, including nested ones: package lookup is exact-match,
 so a marker on `com.example.jvm` does not cover
