@@ -1,8 +1,7 @@
 # Sarto OneJar
 
-One JAR for two runtimes. Sarto OneJar is **opt-in** build machinery for
-library builders who publish a single artefact that executes on both the JVM
-and the browser (TeaVM). You exercise the option with two pieces:
+Sarto OneJar is optional build tooling for libraries that publish a single
+artefact for both the JVM and the browser (TeaVM). It has two parts:
 
 1. **`sarto-onejar-api`** — annotate: `@RuntimeTarget` marks which packages
    or classes belong to the JVM and which belong to TeaVM (unmarked code is
@@ -13,8 +12,9 @@ and the browser (TeaVM). You exercise the option with two pieces:
    TeaVM transformer removes the JVM-designated links from the browser
    compile.
 
-Pruning is subtractive only and TeaVM-compile only. It never substitutes:
-alternatives come from explicit bindings, never implicitly.
+Pruning only removes code, and only from the TeaVM compile. It does not
+substitute one class for another; alternatives are declared as explicit
+bindings.
 
 ## Modules
 
@@ -23,36 +23,36 @@ alternatives come from explicit bindings, never implicitly.
 | `sarto-onejar-api` | Annotations plus the index contract. Dependency-free. |
 | `sarto-onejar-plugin` | Index generation, static bindings, TeaVM pruning. Processor path and provided TeaVM wiring. Jar packaging until the first mojo lands. |
 
-## The problem, in one paragraph
+## The problem
 
 Your library ships as one JAR. On the JVM, that JAR runs normally:
 everything in it works. In the browser, TeaVM compiles that JAR ahead of
-time into JavaScript. It needs a closed world, it chokes on JVM-only APIs
-such as file access or thread pools, and everything it can reach ends up in
-the download. The machinery here lets one artefact serve both: each runtime
-sees only its side.
+time into JavaScript. It needs a closed world, it cannot compile JVM-only
+APIs such as file access or thread pools, and everything it can reach ends up
+in the download. OneJar lets one artefact serve both runtimes, with each
+runtime seeing only the code meant for it.
 
-## The core idea: mark, select, prune
+## How it works: mark, select, prune
 
-Three tools, three jobs. Do not mix them up:
+OneJar uses three mechanisms, each with a separate job:
 
 1. **Mark ownership** with `@RuntimeTarget`. You label which packages or
    classes belong to the JVM and which belong to TeaVM. Unmarked code is
    portable and goes everywhere.
 2. **Select alternatives** with `@StaticRuntimeBinding`. When the *same
    role* needs to exist on both runtimes (say, a transport), you write two
-   implementations and declare which serves which target. This is the *only*
-   substitution mechanism. Nothing substitutes automatically.
+   implementations and declare which serves which target. This is the only
+   way one implementation is substituted for another.
 3. **Prune the rest** with the TeaVM transformer. When TeaVM compiles, the
    links the library builder designated JVM-only are removed from its world:
    their methods, fields, and place in the type hierarchy are neutralised so
    they cannot leak into dispatch or reflection.
 
-Notice what pruning does *not* do: it never replaces anything. Marking a
-class JVM-only deletes it from the browser build. If browser-reachable code
-still references it, the TeaVM build fails. That failure is a guardrail, but
-it arrives late and speaks TeaVM, so the real skill is structuring your code
-so it never happens (see "The rules" below).
+Pruning does not replace anything. Marking a class JVM-only removes it from
+the browser build, and if browser-reachable code still references it, the
+TeaVM build fails. That failure is a useful safeguard, but it comes late and
+is reported in TeaVM's terms, so it is better to structure the code so it does
+not happen (see "The rules" below).
 
 ## One JAR, three source roots
 
@@ -67,8 +67,8 @@ A unified module keeps three source trees side by side:
 Join them with `build-helper-maven-plugin` (`add-source` for the two extra
 roots), then **one `javac` invocation compiles all three roots into a single
 JAR**, with matching `-sources` and `-javadoc` JARs that must contain every
-entry exactly once. So yes: *everything* ends up in the jar. The JVM runs
-all of it. The TeaVM compile sees all of it and then deletes the JVM side.
+entry exactly once. Everything ends up in the JAR: the JVM runs all of it,
+and the TeaVM compile sees all of it and then removes the JVM side.
 
 ## Mark every package
 
@@ -99,8 +99,8 @@ means portable, and there is no portable kind.
 
 ## What the compiler does not do for you
 
-Because all three roots compile together, **the compiler will happily let
-portable code import a JVM-only class**. Nothing turns red in the IDE. The
+Because all three roots compile together, **the compiler allows portable
+code to import a JVM-only class**, and the IDE does not flag it. The
 partition is enforced one step later, on the packaged JAR, by
 dependency-direction rules (run them as an integration test during `verify`,
 until the plugin's `check` goal lands):
@@ -108,31 +108,30 @@ until the plugin's `check` goal lands):
 - portable code (the `main` root) may depend on **neither** JVM-only **nor**
   TeaVM-only packages;
 - `teavm`-root code may not touch JVM-only packages (`..jvm..`,
-  `java.awt`, `javax.swing`, `java.net.http`, Mockito, and friends);
+  `java.awt`, `javax.swing`, `java.net.http`, Mockito and similar);
 - `jre`-root code may not touch TeaVM-only packages (`..teavm..`,
-  `org.teavm..`, and friends).
+  `org.teavm..` and similar).
 
-Each rule wants a negative self-check proving it fires. So the feedback loop
-is: write the import, run `verify`, get a named violation pointing at the
-exact reference, long before any TeaVM run. Package naming matters here, not
+Each rule should have a negative self-check proving that it fires. The
+feedback loop is: write the import, run `verify`, and get a named violation
+pointing at the exact reference, well before any TeaVM run. Package naming matters here, not
 just the directory: the boundary is tracked per class by the source root
 that declared it, with package patterns covering well-known third-party APIs
 on each side. Put a class in the wrong root and the test tells you; put it
 in the right root but outside a marked package and the marker may not cover
 it.
 
-## The mental model: two views of one artefact
+## Two views of one artefact
 
 - **The JVM view**: everything is present. Thread pools, file access, host
   adapters, all there, all working. Nothing is ever pruned on this side.
 - **The TeaVM view**: the JVM side has been deleted. Only portable code plus
   TeaVM-marked code exists.
 
-Write every class so it makes sense in *both* views. The question to ask
-about each class is not "what does it do?" but "which views may see it?" If
-the answer is "both, except this one method", restructure until the answer
-is per class, because method-level marks are recorded but have no effect
-(see below).
+Write every class so it makes sense in both views. For each class, ask which
+views may see it. If the answer is "both, except this one method", split the
+class so the answer is per class, because method-level marks are recorded but
+have no effect (see below).
 
 ## The rules
 
@@ -181,7 +180,7 @@ is per class, because method-level marks are recorded but have no effect
 
 ## Dealing with third-party libraries
 
-Three situations, three responses:
+There are three cases:
 
 1. **Portable library (pure Java).** Do nothing. TeaVM compiles whatever of
    it is reachable; the JVM runs all of it. The only duty is transitive:
@@ -191,7 +190,7 @@ Three situations, three responses:
    hand-written references outside any generated selection are caught by the
    TeaVM build. No declaration needed as long as nothing reachable names it.
 3. **JVM-only library leaking into TeaVM's world without a direct
-   reference.** The sharp case is a third-party class implementing a
+   reference.** The difficult case is a third-party class implementing a
    *portable* interface: TeaVM considers all classpath implementors as
    dispatch candidates, so the JVM class gets pulled in with its internals
    and the compile fails far from the cause. Since the code cannot be
@@ -211,14 +210,14 @@ Three situations, three responses:
 
 ## Why there is no method-level pruning
 
-This is deliberate, not a gap. Subtracting individual members could be
-flagged at compile time: a build check can find every reference to a removed
+Method-level pruning is left out on purpose. Removing individual members could
+be checked at compile time: a build check can find every reference to a removed
 member. But the outcome is difficult to reason about. The same class would
 exist in both views with different shapes, forcing every call site, override,
 and test to be read twice, once per runtime, with overrides making the
 behaviour non-local. Class-level pruning keeps the rule total and checkable:
-a class is either present in a view or absent. If a class feels like it needs
-per-member targets, that feeling is the design telling you to split it.
+a class is either present in a view or absent. A class that seems to need
+per-member targets should be split into one class per runtime.
 
 Patching compiled third-party archives (classpath shadowing with explicit
 opt-in) is a separate build-internal concern, not a developer authoring
