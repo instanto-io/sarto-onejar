@@ -46,9 +46,8 @@ OneJar uses three mechanisms, each with a separate job:
 
 Marking a class JVM-only removes it from the browser build, and if
 browser-reachable code still references it, the TeaVM build fails. That
-failure is a useful safeguard, but it comes late and is reported in TeaVM's
-terms, so it is better to structure the code so it does not happen (see
-"The rules" below).
+error only appears when TeaVM compiles, so follow "The rules" below to avoid
+it.
 
 ## One JAR, three source roots
 
