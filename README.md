@@ -1,53 +1,17 @@
 # Sarto OneJar
 
-Sarto OneJar is optional build tooling for libraries that publish a single
-artefact for both the JVM and the browser (TeaVM). It has two parts:
-
-1. **`sarto-onejar-api`** — annotate: `@RuntimeTarget` marks which packages
-   or classes belong to the JVM and which belong to TeaVM (unmarked code is
-   portable); `@StaticRuntimeBinding` declares per-target implementations
-   behind one portable contract.
-2. **`sarto-onejar-plugin`** — build: its annotation processor writes the
-   versioned runtime-target index and generates the per-target bindings; its
-   TeaVM transformer removes the JVM-designated links from the browser
-   compile.
+Sarto OneJar lets one Java library serve both the JVM and TeaVM. Mark
+runtime-specific packages with `@RuntimeTarget`, keep shared code unmarked,
+and use `@StaticRuntimeBinding` when one portable contract needs a different
+implementation in each runtime. Its processor records those choices and its
+TeaVM transformer removes the JVM-only links from browser output.
 
 ## Modules
 
 | Module | Purpose |
 | --- | --- |
 | `sarto-onejar-api` | Annotations plus the index contract. Dependency-free. |
-| `sarto-onejar-plugin` | Index generation, static bindings, TeaVM pruning. Processor path and provided TeaVM wiring. Jar packaging until the first mojo lands. |
-
-## The problem
-
-Your library ships as one JAR. On the JVM, that JAR runs normally:
-everything in it works. In the browser, TeaVM compiles that JAR ahead of
-time into JavaScript. It needs a closed world, it cannot compile JVM-only
-APIs such as file access or thread pools, and everything it can reach ends up
-in the download. OneJar lets one artefact serve both runtimes, with each
-runtime seeing only the code meant for it.
-
-## How it works: mark, select, prune
-
-OneJar uses three mechanisms, each with a separate job:
-
-1. **Mark ownership** with `@RuntimeTarget`. You label which packages or
-   classes belong to the JVM and which belong to TeaVM. Unmarked code is
-   portable and goes everywhere.
-2. **Select alternatives** with `@StaticRuntimeBinding`. When the *same
-   role* needs to exist on both runtimes (say, a transport), you write two
-   implementations and declare which serves which target. This is the only
-   way one implementation is substituted for another.
-3. **Prune the rest** with the TeaVM transformer. When TeaVM compiles, the
-   links the library builder designated JVM-only are removed from its world:
-   their methods, fields, and place in the type hierarchy are neutralised so
-   they cannot leak into dispatch or reflection.
-
-Marking a class JVM-only removes it from the browser build, and if
-browser-reachable code still references it, the TeaVM build fails. That
-error only appears when TeaVM compiles, so follow "The rules" below to avoid
-it.
+| `sarto-onejar-plugin` | Index generation, static bindings, TeaVM pruning. Use on javac's processor path and in the TeaVM build. |
 
 ## One JAR, three source roots
 
@@ -91,42 +55,6 @@ but fights the packaging cross-check, which looks classes up by package, so
 prefer moving the class. `src/main` packages are never marked: unmarked
 means portable, and there is no portable kind.
 
-## What the compiler does not do for you
-
-Because all three roots compile together, **the compiler allows portable
-code to import a JVM-only class**, and the IDE does not flag it. The
-partition is enforced one step later, on the packaged JAR, by
-dependency-direction rules (run them as an integration test during `verify`,
-until the plugin's `check` goal lands):
-
-- portable code (the `main` root) may depend on **neither** JVM-only **nor**
-  TeaVM-only packages;
-- `teavm`-root code may not touch JVM-only packages (`..jvm..`,
-  `java.awt`, `javax.swing`, `java.net.http`, Mockito and similar);
-- `jre`-root code may not touch TeaVM-only packages (`..teavm..`,
-  `org.teavm..` and similar).
-
-Each rule should have a negative self-check proving that it fires. The
-feedback loop is: write the import, run `verify`, and get a named violation
-pointing at the exact reference, well before any TeaVM run. Package naming matters here, not
-just the directory: the boundary is tracked per class by the source root
-that declared it, with package patterns covering well-known third-party APIs
-on each side. Put a class in the wrong root and the test tells you; put it
-in the right root but outside a marked package and the marker may not cover
-it.
-
-## Two views of one artefact
-
-- **The JVM view**: everything is present. Thread pools, file access, host
-  adapters, all there, all working. Nothing is ever pruned on this side.
-- **The TeaVM view**: the JVM side has been deleted. Only portable code plus
-  TeaVM-marked code exists.
-
-Write every class so it makes sense in both views. For each class, ask which
-views may see it. If the answer is "both, except this one method", split the
-class so the answer is per class, because method-level marks are recorded but
-have no effect (see below).
-
 ## The rules
 
 1. **One class, one runtime** (plus portable, which is the default and where
@@ -153,128 +81,23 @@ have no effect (see below).
    plus one implementation per side, selected by a binding. Never one class
    with per-runtime methods.
 
-## Use cases the library builder meets
-
-- **Pure portable library.** No markers, no bindings, no plugin beyond the
-  ordinary build. OneJar stays out of the way; adopt nothing.
-- **Library with runtime-specific internals.** Mark the sides, partition the
-  roots, wire the processor path so the index is written, register the
-  transformer in the TeaVM build, and keep the boundary test green. This is
-  the standard adoption, and the checklist in the previous section is the
-  whole of it.
-- **Library offering one role on both runtimes.** Add a
-  `@StaticRuntimeBinding` pair per role (one contract, one implementation
-  per target, each reached through its generated per-target accessor) so
-  callers on each side resolve without naming a runtime.
-- **Application consuming unified libraries.** Nothing extra: depend on the
-  libraries, build the TeaVM app with the transformer registered, and start
-  through the matching adapter. The libraries' indexes travel inside their
-  JARs.
-
-## Dealing with third-party libraries
-
-There are three cases:
-
-1. **Portable library (pure Java).** Do nothing. TeaVM compiles whatever of
-   it is reachable; the JVM runs all of it. The only duty is transitive:
-   make sure nothing it pulls into the reachable closure is JVM-only.
-2. **JVM-only library used only from your JVM side.** Keep it out of the
-   TeaVM-reachable closure. The boundary test enforces the package lists;
-   hand-written references outside any generated selection are caught by the
-   TeaVM build. No declaration needed as long as nothing reachable names it.
-3. **JVM-only library leaking into TeaVM's world without a direct
-   reference.** The difficult case is a third-party class implementing a
-   *portable* interface: TeaVM considers all classpath implementors as
-   dispatch candidates, so the JVM class gets pulled in with its internals
-   and the compile fails far from the cause. Since the code cannot be
-   annotated or renamed, declare its packages for their owning target. The
-   supported mechanism today is a shadow source tree carrying only
-   `package-info.java` markers that mirror the foreign packages; a
-   first-class declared-packages option is planned and will accept the same
-   package patterns the boundary test already uses.
-
 ## When things go wrong
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | TeaVM build fails on a missing type you marked JVM-only | Portable or TeaVM-marked code still references it | Remove the reference, or move the caller behind a binding |
-| Info note: method or field target not selectable | `@RuntimeTarget` on a method or field | Move the member to a target-owned class (see below) |
+| Info note: method or field target not selectable | `@RuntimeTarget` on a method or field | Move the member to a target-owned class |
 | TeaVM fails inside a library you do not own | Undeclared foreign packages pulled in as dispatch candidates | Declare the foreign packages for their owning target |
 
-## Why there is no method-level pruning
+## Connect the tools
 
-Method-level pruning is left out on purpose. Removing individual members could
-be checked at compile time: a build check can find every reference to a removed
-member. But the outcome is difficult to reason about. The same class would
-exist in both views with different shapes, forcing every call site, override,
-and test to be read twice, once per runtime, with overrides making the
-behaviour non-local. Class-level pruning keeps the rule total and checkable:
-a class is either present in a view or absent. A class that seems to need
-per-member targets should be split into one class per runtime.
+Add `sarto-onejar-api` to the library and place `sarto-onejar-plugin` on
+javac's annotation-processor path. Register the plugin's TeaVM transformer
+in the browser build. The generated runtime-target index travels in the
+library JAR, so applications using that JAR do not need to list its packages
+again. Use the same OneJar version for the API and plugin.
 
-Patching compiled third-party archives (classpath shadowing with explicit
-opt-in) is a separate build-internal concern, not a developer authoring
-construct, and it does not change this rule.
-
-## Consuming
-
-```xml
-<properties>
-  <sarto-onejar.version>0.1.0-SNAPSHOT</sarto-onejar.version>
-</properties>
-
-<dependencies>
-  <dependency>
-    <groupId>io.instanto</groupId>
-    <artifactId>sarto-onejar-api</artifactId>
-    <version>${sarto-onejar.version}</version>
-  </dependency>
-</dependencies>
-```
-
-Put the processor on the annotation-processor path and point the TeaVM build
-at the transformer:
-
-```xml
-<plugin>
-  <groupId>org.apache.maven.plugins</groupId>
-  <artifactId>maven-compiler-plugin</artifactId>
-  <configuration>
-    <annotationProcessorPaths>
-      <path>
-        <groupId>io.instanto</groupId>
-        <artifactId>sarto-onejar-plugin</artifactId>
-        <version>${sarto-onejar.version}</version>
-      </path>
-    </annotationProcessorPaths>
-    <compilerArgs>
-      <arg>-Asarto.target.origin=${project.groupId}:${project.artifactId}:${project.version}</arg>
-    </compilerArgs>
-  </configuration>
-</plugin>
-```
-
-Snapshots publish to the Instanto Maven registry:
-
-```xml
-<repositories>
-  <repository>
-    <id>forgejo</id>
-    <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
-    <releases><enabled>false</enabled></releases>
-    <snapshots><enabled>true</enabled></snapshots>
-  </repository>
-</repositories>
-```
-
-## Build this repository
-
-```shell
-./mvnw verify
-```
-
-CI resolves the shared parent (`io.instanto:instanto-org-pom`) from the same
-registry; see `.github/workflows/build.yml`.
+The [module POMs](pom.xml) show the wiring.
 
 ## License
 
