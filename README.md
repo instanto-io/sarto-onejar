@@ -12,10 +12,6 @@ artefact for both the JVM and the browser (TeaVM). It has two parts:
    TeaVM transformer removes the JVM-designated links from the browser
    compile.
 
-Pruning only removes code, and only from the TeaVM compile. It does not
-substitute one class for another; alternatives are declared as explicit
-bindings.
-
 ## Modules
 
 | Module | Purpose |
@@ -48,8 +44,7 @@ OneJar uses three mechanisms, each with a separate job:
    their methods, fields, and place in the type hierarchy are neutralised so
    they cannot leak into dispatch or reflection.
 
-Pruning does not replace anything. Marking a class JVM-only removes it from
-the browser build, and if browser-reachable code still references it, the
+Marking a class JVM-only removes it from the browser build, and if browser-reachable code still references it, the
 TeaVM build fails. That failure is a useful safeguard, but it comes late and
 is reported in TeaVM's terms, so it is better to structure the code so it does
 not happen (see "The rules" below).
@@ -140,8 +135,7 @@ have no effect (see below).
 2. **Never reference JVM-only code from TeaVM-reachable code.** The boundary
    test catches it, or failing that, the TeaVM build does.
 3. **If a role must exist on both runtimes, provide both implementations
-   explicitly**, through a `@StaticRuntimeBinding`. There is no implicit
-   fallback.
+   explicitly**, through a `@StaticRuntimeBinding`.
 4. **Tests are a third audience.** The same setup covers test applications
    using platform-specific mocks.
 
@@ -157,7 +151,7 @@ have no effect (see below).
 3. **Does it touch the DOM, JSO, or browser APIs?** Put it in
    `src/teavm/java`, mirror image of the above.
 4. **Does a role need to exist on both?** Write a portable contract in `main`
-   plus one implementation per side, selected explicitly. Never one class
+   plus one implementation per side, selected by a binding. Never one class
    with per-runtime methods.
 
 ## Use cases the library builder meets
