@@ -55,31 +55,43 @@ but fights the packaging cross-check, which looks classes up by package, so
 prefer moving the class. `src/main` packages are never marked: unmarked
 means portable, and there is no portable kind.
 
-## The rules
-
-1. **One class, one runtime** (plus portable, which is the default and where
-   most code lives).
-2. **Never reference JVM-only code from TeaVM-reachable code.** The boundary
-   test catches it, or failing that, the TeaVM build does.
-3. **If a role must exist on both runtimes, provide both implementations
-   explicitly**, through a `@StaticRuntimeBinding`.
-4. **Tests are a third audience.** The same setup covers test applications
-   using platform-specific mocks.
-
 ## Deciding where a new class goes
+
+Each class belongs to one runtime, or is portable, which is where most code
+lives.
 
 1. **Could it run in a browser with no changes?** Put it in `src/main/java`,
    no marker.
 2. **Does it touch threads, sockets, files, or other JVM-only APIs?** Put it
    in `src/jre/java`, under a JVM-marked package. If portable code needs the
    *capability*, expose a portable façade in `main` and select the
-   implementation with a binding. Do not import the `jre` class directly;
-   the boundary test forbids it.
+   implementation with a binding. Never reference the `jre` class from
+   TeaVM-reachable code: the boundary test catches it, or failing that, the
+   TeaVM build does.
 3. **Does it touch the DOM, JSO, or browser APIs?** Put it in
    `src/teavm/java`, mirror image of the above.
 4. **Does a role need to exist on both?** Write a portable contract in `main`
    plus one implementation per side, selected by a binding. Never one class
    with per-runtime methods.
+
+Tests follow the same rules: test applications can use platform-specific
+mocks in the same way.
+
+## Static bindings
+
+```java
+@StaticRuntimeBinding(name = "transport", contract = Transport.class,
+    implementation = JvmTransport.class, target = RuntimeTarget.Kind.JVM)
+@StaticRuntimeBinding(name = "transport", contract = Transport.class,
+    implementation = TeaVmTransport.class, target = RuntimeTarget.Kind.TEAVM)
+final class AppBindings {}
+```
+
+The processor generates `AppBindingsJvmBindings.transport()` and
+`AppBindingsTeaVmBindings.transport()` in the same package. Each returns a
+`Transport` and constructs only its own target's implementation. The
+implementation must be a concrete class assignable to the contract, with a
+constructor the generated class can reach; anything else fails compilation.
 
 ## When things go wrong
 
@@ -92,8 +104,9 @@ means portable, and there is no portable kind.
 ## Connect the tools
 
 Add `sarto-onejar-api` to the library and place `sarto-onejar-plugin` on
-javac's annotation-processor path. Register the plugin's TeaVM transformer
-in the browser build. The generated runtime-target index travels in the
+javac's annotation-processor path. Register the plugin's TeaVM transformer,
+`io.instanto.sarto.onejar.teavm.JvmTargetPruningTransformer`, in the browser
+build, with `sarto-onejar-plugin` on the TeaVM classpath. The generated runtime-target index travels in the
 library JAR, so applications using that JAR do not need to list its packages
 again. Use the same OneJar version for the API and plugin.
 
