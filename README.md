@@ -93,13 +93,28 @@ The processor generates `AppBindingsJvmBindings.transport()` and
 implementation must be a concrete class assignable to the contract, with a
 constructor the generated class can reach; anything else fails compilation.
 
+## Third-party libraries
+
+- **Portable (pure Java).** Nothing to do. TeaVM compiles whatever of it is
+  reachable, as long as nothing it pulls in is JVM-only.
+- **JVM-only, used only from `src/jre/java`.** Nothing to declare. Keep it
+  out of portable and TeaVM code; the boundary test enforces this.
+- **JVM-only, pulled into TeaVM without a direct reference.** This happens
+  when a third-party class implements one of your portable interfaces:
+  TeaVM treats every implementor on the classpath as a dispatch candidate,
+  so the class is pulled in and the compile fails far from the cause. You
+  can't annotate foreign code, so declare its packages for their owning
+  target with a shadow source tree that holds only `package-info.java`
+  markers mirroring the foreign packages. A first-class option for
+  declaring foreign packages is planned.
+
 ## When things go wrong
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | TeaVM build fails on a missing type you marked JVM-only | Portable or TeaVM-marked code still references it | Remove the reference, or move the caller behind a binding |
 | Info note: method or field target not selectable | `@RuntimeTarget` on a method or field | Move the member to a target-owned class |
-| TeaVM fails inside a library you do not own | Undeclared foreign packages pulled in as dispatch candidates | Declare the foreign packages for their owning target |
+| TeaVM fails inside a library you do not own | Undeclared foreign packages pulled in as dispatch candidates | Declare the foreign packages (see [Third-party libraries](#third-party-libraries)) |
 
 ## Connect the tools
 
