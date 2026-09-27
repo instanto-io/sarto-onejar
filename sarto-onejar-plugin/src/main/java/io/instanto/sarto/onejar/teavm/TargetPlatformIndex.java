@@ -19,23 +19,22 @@ import java.util.Map;
 import java.util.Set;
 
 /** Build-JVM reader for the versioned target indexes on TeaVM's compilation classpath. */
-final class RuntimeTargetIndex {
-  static final String RESOURCE = "META-INF/sarto/runtime-targets.properties";
+final class TargetPlatformIndex {
+  static final String RESOURCE = "META-INF/sarto/target-platforms.properties";
 
   private final Map<String, TargetEntry> classes;
   private final Map<String, TargetEntry> packages;
 
-  private RuntimeTargetIndex(
-      Map<String, TargetEntry> classes, Map<String, TargetEntry> packages) {
+  private TargetPlatformIndex(Map<String, TargetEntry> classes, Map<String, TargetEntry> packages) {
     this.classes = Map.copyOf(classes);
     this.packages = Map.copyOf(packages);
   }
 
-  static RuntimeTargetIndex load(ClassLoader preferredLoader) {
+  static TargetPlatformIndex load(ClassLoader preferredLoader) {
     try {
       Set<URL> resources = new LinkedHashSet<>();
       collect(resources, preferredLoader);
-      collect(resources, RuntimeTargetIndex.class.getClassLoader());
+      collect(resources, TargetPlatformIndex.class.getClassLoader());
       collect(resources, Thread.currentThread().getContextClassLoader());
       Map<String, TargetEntry> classes = new LinkedHashMap<>();
       Map<String, TargetEntry> packages = new LinkedHashMap<>();
@@ -44,9 +43,9 @@ final class RuntimeTargetIndex {
           add(input, resource.toString(), classes, packages);
         }
       }
-      return new RuntimeTargetIndex(classes, packages);
+      return new TargetPlatformIndex(classes, packages);
     } catch (IOException | RuntimeException failure) {
-      throw new IllegalStateException("Could not load Sarto runtime target indexes", failure);
+      throw new IllegalStateException("Could not load Sarto target platform indexes", failure);
     }
   }
 
@@ -62,8 +61,7 @@ final class RuntimeTargetIndex {
       return direct.target() == Target.JVM;
     }
     int separator = className.lastIndexOf('.');
-    TargetEntry packageEntry =
-        packages.get(separator < 0 ? "" : className.substring(0, separator));
+    TargetEntry packageEntry = packages.get(separator < 0 ? "" : className.substring(0, separator));
     return packageEntry != null && packageEntry.target() == Target.JVM;
   }
 
@@ -86,7 +84,8 @@ final class RuntimeTargetIndex {
     Map<String, String> values = values(input);
     String format = required(values, "format", resource);
     if (!"1".equals(format)) {
-      throw new IOException("Unsupported Sarto runtime target index format " + format + " in " + resource);
+      throw new IOException(
+          "Unsupported Sarto target platform index format " + format + " in " + resource);
     }
     String origin = decoded(required(values, "origin", resource));
     int count = integer(values, "entries", resource);
@@ -98,7 +97,7 @@ final class RuntimeTargetIndex {
       try {
         target = Target.valueOf(required(values, prefix + "target", resource));
       } catch (IllegalArgumentException invalid) {
-        throw new IOException("Invalid runtime target in " + resource + " at " + prefix, invalid);
+        throw new IOException("Invalid target platform in " + resource + " at " + prefix, invalid);
       }
       if ("METHOD".equals(kind) || "MEMBER".equals(kind)) {
         continue;
@@ -109,13 +108,13 @@ final class RuntimeTargetIndex {
       } else if ("PACKAGE".equals(kind)) {
         destination = packages;
       } else {
-        throw new IOException("Invalid runtime target entry kind " + kind + " in " + resource);
+        throw new IOException("Invalid target platform entry kind " + kind + " in " + resource);
       }
       TargetEntry entry = new TargetEntry(target, origin);
       TargetEntry previous = destination.putIfAbsent(name, entry);
       if (previous != null && previous.target() != target) {
         throw new IOException(
-            "Conflicting runtime targets for "
+            "Conflicting target platforms for "
                 + name
                 + " from "
                 + previous.origin()
@@ -136,7 +135,7 @@ final class RuntimeTargetIndex {
         }
         int separator = line.indexOf('=');
         if (separator < 1) {
-          throw new IOException("Invalid runtime target index line: " + line);
+          throw new IOException("Invalid target platform index line: " + line);
         }
         result.put(line.substring(0, separator), line.substring(separator + 1));
       }

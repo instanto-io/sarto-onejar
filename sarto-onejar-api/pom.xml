@@ -12,7 +12,7 @@
 
     <artifactId>sarto-onejar-api</artifactId>
     <name>Sarto OneJar API</name>
-    <description>Runtime-target and static-binding annotations for unified JVM and TeaVM JARs</description>
+    <description>Target-platform and platform-binding annotations for unified JVM and TeaVM JARs</description>
 
     <dependencies>
         <dependency>

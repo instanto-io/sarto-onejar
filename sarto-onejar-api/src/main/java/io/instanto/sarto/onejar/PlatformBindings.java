@@ -12,10 +12,10 @@ import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
-/** Container for repeatable {@link StaticRuntimeBinding} declarations. */
+/** Container for repeatable {@link PlatformBinding} declarations. */
 @Documented
 @Retention(SOURCE)
 @Target(TYPE)
-public @interface StaticRuntimeBindings {
-  StaticRuntimeBinding[] value();
+public @interface PlatformBindings {
+  PlatformBinding[] value();
 }

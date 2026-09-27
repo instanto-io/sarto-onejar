@@ -1,8 +1,8 @@
 # Sarto OneJar
 
 Sarto OneJar lets one Java library serve both the JVM and TeaVM. Mark
-runtime-specific packages with `@RuntimeTarget`, keep shared code unmarked,
-and use `@StaticRuntimeBinding` when one portable contract needs a different
+runtime-specific packages with `@TargetPlatform`, keep shared code unmarked,
+and use `@PlatformBinding` when one portable contract needs a different
 implementation in each runtime. Its processor records those choices and its
 TeaVM transformer removes the JVM-only links from browser output.
 
@@ -11,7 +11,7 @@ TeaVM transformer removes the JVM-only links from browser output.
 | Module | Purpose |
 | --- | --- |
 | `sarto-onejar-api` | Annotations plus the index contract. Dependency-free. |
-| `sarto-onejar-plugin` | Index generation, static bindings, TeaVM pruning. Use on javac's processor path and in the TeaVM build. |
+| `sarto-onejar-plugin` | Index generation, platform bindings, TeaVM pruning. Use on javac's processor path and in the TeaVM build. |
 
 ## One JAR, three source roots
 
@@ -35,13 +35,13 @@ Each side gets its marker in a `package-info.java` at the appropriate
 package, for example:
 
 ```java
-@io.instanto.sarto.onejar.RuntimeTarget(
-    io.instanto.sarto.onejar.RuntimeTarget.Kind.JVM)
+@io.instanto.sarto.onejar.TargetPlatform(
+    io.instanto.sarto.onejar.TargetPlatform.Kind.JVM)
 package com.example.app.jvm;
 ```
 
-Those markers feed the runtime-target index
-(`META-INF/sarto/runtime-targets.properties`), stamped with the module's own
+Those markers feed the target-platform index
+(`META-INF/sarto/target-platforms.properties`), stamped with the module's own
 `groupId:artifactId:version` as its origin, so conflicting indexes from two
 JARs can name their owners. A packaging test then cross-checks the artefact
 itself: every packaged class must have a matching index entry with the
@@ -77,13 +77,13 @@ lives.
 Tests follow the same rules: test applications can use platform-specific
 mocks in the same way.
 
-## Static bindings
+## Platform bindings
 
 ```java
-@StaticRuntimeBinding(name = "transport", contract = Transport.class,
-    implementation = JvmTransport.class, target = RuntimeTarget.Kind.JVM)
-@StaticRuntimeBinding(name = "transport", contract = Transport.class,
-    implementation = TeaVmTransport.class, target = RuntimeTarget.Kind.TEAVM)
+@PlatformBinding(name = "transport", contract = Transport.class,
+    implementation = JvmTransport.class, target = TargetPlatform.Kind.JVM)
+@PlatformBinding(name = "transport", contract = Transport.class,
+    implementation = TeaVmTransport.class, target = TargetPlatform.Kind.TEAVM)
 final class AppBindings {}
 ```
 
@@ -113,7 +113,7 @@ constructor the generated class can reach; anything else fails compilation.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | TeaVM build fails on a missing type you marked JVM-only | Portable or TeaVM-marked code still references it | Remove the reference, or move the caller behind a binding |
-| Info note: method or field target not selectable | `@RuntimeTarget` on a method or field | Move the member to a target-owned class |
+| Info note: method or field target not selectable | `@TargetPlatform` on a method or field | Move the member to a target-owned class |
 | TeaVM fails inside a library you do not own | Undeclared foreign packages pulled in as dispatch candidates | Declare the foreign packages (see [Third-party libraries](#third-party-libraries)) |
 
 ## Connect the tools
@@ -121,9 +121,9 @@ constructor the generated class can reach; anything else fails compilation.
 Add `sarto-onejar-api` to the library and place `sarto-onejar-plugin` on
 javac's annotation-processor path. Register the plugin's TeaVM transformer,
 `io.instanto.sarto.onejar.teavm.JvmTargetPruningTransformer`, in the browser
-build, with `sarto-onejar-plugin` on the TeaVM classpath. The generated runtime-target index travels in the
-library JAR, so applications using that JAR do not need to list its packages
-again. Use the same OneJar version for the API and plugin.
+build, with `sarto-onejar-plugin` on the TeaVM classpath. The generated
+target-platform index travels in the library JAR, so applications using that
+JAR do not need to list its packages again. Use the same OneJar version for the API and plugin.
 
 The [module POMs](pom.xml) show the wiring.
 

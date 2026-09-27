@@ -15,17 +15,17 @@ import org.teavm.model.ClassHolderTransformerContext;
  *
  * <p>The application graph has already rejected direct edges to these classes. Neutralising their
  * type hierarchy closes TeaVM's whole-classpath virtual-dispatch edge as well. The versioned Sarto
- * runtime-target index is the authoritative source; package names have no effect.
+ * target-platform index is the authoritative source; package names have no effect.
  */
 public final class JvmTargetPruningTransformer implements ClassHolderTransformer {
-  private final RuntimeTargetIndex targets;
+  private final TargetPlatformIndex targets;
 
   public JvmTargetPruningTransformer() {
     this(Thread.currentThread().getContextClassLoader());
   }
 
   JvmTargetPruningTransformer(ClassLoader loader) {
-    targets = RuntimeTargetIndex.load(loader);
+    targets = TargetPlatformIndex.load(loader);
   }
 
   @Override

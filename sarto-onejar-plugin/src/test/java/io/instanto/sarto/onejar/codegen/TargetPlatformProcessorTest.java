@@ -17,29 +17,29 @@ import java.util.Base64;
 import javax.tools.StandardLocation;
 import org.junit.jupiter.api.Test;
 
-class RuntimeTargetProcessorTest {
+class TargetPlatformProcessorTest {
   @Test
   void writesDeterministicPackageClassAndMethodTargets() throws IOException {
     Compilation compilation =
         Compiler.javac()
             .withOptions("-Asarto.target.origin=io.instanto:fixture:1")
-            .withProcessors(new RuntimeTargetProcessor())
+            .withProcessors(new TargetPlatformProcessor())
             .compile(
                 JavaFileObjects.forSourceString(
                     "example.jvm.package-info",
                     """
-                    @io.instanto.sarto.onejar.RuntimeTarget(
-                        io.instanto.sarto.onejar.RuntimeTarget.Kind.JVM)
+                    @io.instanto.sarto.onejar.TargetPlatform(
+                        io.instanto.sarto.onejar.TargetPlatform.Kind.JVM)
                     package example.jvm;
                     """),
                 JavaFileObjects.forSourceString(
                     "example.Targets",
                     """
                     package example;
-                    import io.instanto.sarto.onejar.RuntimeTarget;
-                    @RuntimeTarget(RuntimeTarget.Kind.TEAVM)
+                    import io.instanto.sarto.onejar.TargetPlatform;
+                    @TargetPlatform(TargetPlatform.Kind.TEAVM)
                     class Targets {
-                      @RuntimeTarget(RuntimeTarget.Kind.JVM)
+                      @TargetPlatform(TargetPlatform.Kind.JVM)
                       String produce() { return "value"; }
                     }
                     """));
@@ -47,7 +47,8 @@ class RuntimeTargetProcessorTest {
     assertThat(compilation.status()).isEqualTo(Compilation.Status.SUCCESS);
     String index =
         compilation
-            .generatedFile(StandardLocation.CLASS_OUTPUT, "", RuntimeTargetProcessor.INDEX_RESOURCE)
+            .generatedFile(
+                StandardLocation.CLASS_OUTPUT, "", TargetPlatformProcessor.INDEX_RESOURCE)
             .orElseThrow()
             .getCharContent(false)
             .toString();
@@ -66,7 +67,7 @@ class RuntimeTargetProcessorTest {
   void generatesStructurallyTargetSpecificStaticBindings() throws IOException {
     Compilation compilation =
         Compiler.javac()
-            .withProcessors(new RuntimeTargetProcessor())
+            .withProcessors(new TargetPlatformProcessor())
             .compile(
                 JavaFileObjects.forSourceString(
                     "example.Transport",
@@ -90,18 +91,18 @@ class RuntimeTargetProcessorTest {
                     "example.ApplicationBindings",
                     """
                     package example;
-                    import io.instanto.sarto.onejar.RuntimeTarget;
-                    import io.instanto.sarto.onejar.StaticRuntimeBinding;
-                    @StaticRuntimeBinding(
+                    import io.instanto.sarto.onejar.TargetPlatform;
+                    import io.instanto.sarto.onejar.PlatformBinding;
+                    @PlatformBinding(
                         name = "transport",
                         contract = Transport.class,
                         implementation = JvmTransport.class,
-                        target = RuntimeTarget.Kind.JVM)
-                    @StaticRuntimeBinding(
+                        target = TargetPlatform.Kind.JVM)
+                    @PlatformBinding(
                         name = "transport",
                         contract = Transport.class,
                         implementation = TeaVmTransport.class,
-                        target = RuntimeTarget.Kind.TEAVM)
+                        target = TargetPlatform.Kind.TEAVM)
                     final class ApplicationBindings {}
                     """));
 
@@ -130,14 +131,14 @@ class RuntimeTargetProcessorTest {
         compileBindings(
             """
             package example;
-            import io.instanto.sarto.onejar.RuntimeTarget;
-            import io.instanto.sarto.onejar.StaticRuntimeBinding;
+            import io.instanto.sarto.onejar.TargetPlatform;
+            import io.instanto.sarto.onejar.PlatformBinding;
             abstract class AbstractPort implements Port {}
-            @StaticRuntimeBinding(
+            @PlatformBinding(
                 name = "port",
                 contract = Port.class,
                 implementation = AbstractPort.class,
-                target = RuntimeTarget.Kind.JVM)
+                target = TargetPlatform.Kind.JVM)
             final class AbstractBindings {}
             """);
     assertThat(abstractImplementation.status()).isEqualTo(Compilation.Status.FAILURE);
@@ -148,13 +149,13 @@ class RuntimeTargetProcessorTest {
         compileBindings(
             """
             package example;
-            import io.instanto.sarto.onejar.RuntimeTarget;
-            import io.instanto.sarto.onejar.StaticRuntimeBinding;
-            @StaticRuntimeBinding(
+            import io.instanto.sarto.onejar.TargetPlatform;
+            import io.instanto.sarto.onejar.PlatformBinding;
+            @PlatformBinding(
                 name = "port",
                 contract = Port.class,
                 implementation = Port.class,
-                target = RuntimeTarget.Kind.JVM)
+                target = TargetPlatform.Kind.JVM)
             final class InterfaceBindings {}
             """);
     assertThat(interfaceImplementation.status()).isEqualTo(Compilation.Status.FAILURE);
@@ -168,16 +169,16 @@ class RuntimeTargetProcessorTest {
         compileBindings(
             """
             package example;
-            import io.instanto.sarto.onejar.RuntimeTarget;
-            import io.instanto.sarto.onejar.StaticRuntimeBinding;
+            import io.instanto.sarto.onejar.TargetPlatform;
+            import io.instanto.sarto.onejar.PlatformBinding;
             final class PrivatePort implements Port {
               private PrivatePort() {}
             }
-            @StaticRuntimeBinding(
+            @PlatformBinding(
                 name = "port",
                 contract = Port.class,
                 implementation = PrivatePort.class,
-                target = RuntimeTarget.Kind.JVM)
+                target = TargetPlatform.Kind.JVM)
             final class PrivateBindings {}
             """);
     assertThat(privateConstructor.status()).isEqualTo(Compilation.Status.FAILURE);
@@ -188,16 +189,16 @@ class RuntimeTargetProcessorTest {
         compileBindings(
             """
             package example;
-            import io.instanto.sarto.onejar.RuntimeTarget;
-            import io.instanto.sarto.onejar.StaticRuntimeBinding;
+            import io.instanto.sarto.onejar.TargetPlatform;
+            import io.instanto.sarto.onejar.PlatformBinding;
             final class ConfiguredPort implements Port {
               ConfiguredPort(String name) {}
             }
-            @StaticRuntimeBinding(
+            @PlatformBinding(
                 name = "port",
                 contract = Port.class,
                 implementation = ConfiguredPort.class,
-                target = RuntimeTarget.Kind.JVM)
+                target = TargetPlatform.Kind.JVM)
             final class ConfiguredBindings {}
             """);
     assertThat(argumentsOnly.status()).isEqualTo(Compilation.Status.FAILURE);
@@ -208,16 +209,16 @@ class RuntimeTargetProcessorTest {
         compileBindings(
             """
             package example;
-            import io.instanto.sarto.onejar.RuntimeTarget;
-            import io.instanto.sarto.onejar.StaticRuntimeBinding;
+            import io.instanto.sarto.onejar.TargetPlatform;
+            import io.instanto.sarto.onejar.PlatformBinding;
             final class Outer {
               public final class InnerPort implements Port {}
             }
-            @StaticRuntimeBinding(
+            @PlatformBinding(
                 name = "port",
                 contract = Port.class,
                 implementation = Outer.InnerPort.class,
-                target = RuntimeTarget.Kind.JVM)
+                target = TargetPlatform.Kind.JVM)
             final class InnerBindings {}
             """);
     assertThat(innerImplementation.status()).isEqualTo(Compilation.Status.FAILURE);
@@ -227,7 +228,7 @@ class RuntimeTargetProcessorTest {
 
   private static Compilation compileBindings(String ownerSource) {
     return Compiler.javac()
-        .withProcessors(new RuntimeTargetProcessor())
+        .withProcessors(new TargetPlatformProcessor())
         .compile(
             JavaFileObjects.forSourceString(
                 "example.Port", "package example;\ninterface Port {}\n"),

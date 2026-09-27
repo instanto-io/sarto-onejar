@@ -16,12 +16,12 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
 /**
- * Declares the runtime that owns an implementation or package.
+ * Declares the platform that owns an implementation or package.
  *
  * <p>Unannotated code is portable. The metadata has no CDI dependency and is consumed at build time
  * when Sarto creates target-specific graphs, bindings, and TeaVM reachability indexes.
  *
- * <p>Method and field placements are recorded in the index but cannot be selected as runtime
+ * <p>Method and field placements are recorded in the index but cannot be selected as platform
  * targets and have no effect. Member-level subtraction could be flagged at compile time, but the
  * resulting per-view class shapes are difficult to reason about, so per-runtime members belong in a
  * target-owned class instead. Patching compiled third-party archives (classpath shadowing with
@@ -30,7 +30,7 @@ import java.lang.annotation.Target;
 @Documented
 @Retention(CLASS)
 @Target({PACKAGE, TYPE, METHOD, FIELD})
-public @interface RuntimeTarget {
+public @interface TargetPlatform {
   Kind value();
 
   enum Kind {

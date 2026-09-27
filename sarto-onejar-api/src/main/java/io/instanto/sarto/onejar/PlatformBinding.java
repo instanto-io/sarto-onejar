@@ -17,8 +17,8 @@ import java.lang.annotation.Target;
 @Documented
 @Retention(SOURCE)
 @Target(TYPE)
-@Repeatable(StaticRuntimeBindings.class)
-public @interface StaticRuntimeBinding {
+@Repeatable(PlatformBindings.class)
+public @interface PlatformBinding {
   /** Java method name exposed by the generated target binding class. */
   String name();
 
@@ -28,6 +28,6 @@ public @interface StaticRuntimeBinding {
   /** Target-owned implementation constructed by the generated binding. */
   Class<?> implementation();
 
-  /** Runtime that owns this implementation. */
-  RuntimeTarget.Kind target();
+  /** Platform that owns this implementation. */
+  TargetPlatform.Kind target();
 }

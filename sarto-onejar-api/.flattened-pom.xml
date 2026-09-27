@@ -10,7 +10,7 @@
   <artifactId>sarto-onejar-api</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <name>Sarto OneJar API</name>
-  <description>Runtime-target and static-binding annotations for unified JVM and TeaVM JARs</description>
+  <description>Target-platform and platform-binding annotations for unified JVM and TeaVM JARs</description>
   <licenses>
     <license>
       <name>Apache License, Version 2.0</name>

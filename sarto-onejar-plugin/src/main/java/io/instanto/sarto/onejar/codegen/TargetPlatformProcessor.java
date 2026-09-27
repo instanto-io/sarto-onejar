@@ -5,9 +5,9 @@
  */
 package io.instanto.sarto.onejar.codegen;
 
-import io.instanto.sarto.onejar.RuntimeTarget;
-import io.instanto.sarto.onejar.StaticRuntimeBinding;
-import io.instanto.sarto.onejar.StaticRuntimeBindings;
+import io.instanto.sarto.onejar.PlatformBinding;
+import io.instanto.sarto.onejar.PlatformBindings;
+import io.instanto.sarto.onejar.TargetPlatform;
 import java.io.IOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -39,17 +39,17 @@ import javax.tools.StandardLocation;
 
 /** Writes explicit runtime metadata into a versioned, CDI-independent classpath index. */
 @SupportedAnnotationTypes({
-  "io.instanto.sarto.onejar.RuntimeTarget",
-  "io.instanto.sarto.onejar.StaticRuntimeBinding",
-  "io.instanto.sarto.onejar.StaticRuntimeBindings"
+  "io.instanto.sarto.onejar.TargetPlatform",
+  "io.instanto.sarto.onejar.PlatformBinding",
+  "io.instanto.sarto.onejar.PlatformBindings"
 })
-@SupportedOptions(RuntimeTargetProcessor.ORIGIN_OPTION)
-public final class RuntimeTargetProcessor extends AbstractProcessor {
-  public static final String INDEX_RESOURCE = "META-INF/sarto/runtime-targets.properties";
+@SupportedOptions(TargetPlatformProcessor.ORIGIN_OPTION)
+public final class TargetPlatformProcessor extends AbstractProcessor {
+  public static final String INDEX_RESOURCE = "META-INF/sarto/target-platforms.properties";
   static final String ORIGIN_OPTION = "sarto.target.origin";
 
-  private final Map<EntryKey, RuntimeTarget.Kind> entries = new LinkedHashMap<>();
-  private final Set<String> generatedStaticBindings = new java.util.LinkedHashSet<>();
+  private final Map<EntryKey, TargetPlatform.Kind> entries = new LinkedHashMap<>();
+  private final Set<String> generatedPlatformBindings = new java.util.LinkedHashSet<>();
   private boolean written;
 
   @Override
@@ -64,18 +64,18 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
 
   @Override
   public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-    for (Element element : roundEnv.getElementsAnnotatedWith(RuntimeTarget.class)) {
-      RuntimeTarget target = element.getAnnotation(RuntimeTarget.class);
+    for (Element element : roundEnv.getElementsAnnotatedWith(TargetPlatform.class)) {
+      TargetPlatform target = element.getAnnotation(TargetPlatform.class);
       if (target != null) {
         collect(element, target.value());
       }
     }
-    Set<Element> staticOwners = new java.util.LinkedHashSet<>();
-    staticOwners.addAll(roundEnv.getElementsAnnotatedWith(StaticRuntimeBinding.class));
-    staticOwners.addAll(roundEnv.getElementsAnnotatedWith(StaticRuntimeBindings.class));
-    for (Element element : staticOwners) {
+    Set<Element> bindingOwners = new java.util.LinkedHashSet<>();
+    bindingOwners.addAll(roundEnv.getElementsAnnotatedWith(PlatformBinding.class));
+    bindingOwners.addAll(roundEnv.getElementsAnnotatedWith(PlatformBindings.class));
+    for (Element element : bindingOwners) {
       if (element instanceof TypeElement owner) {
-        generateStaticBindings(owner);
+        generatePlatformBindings(owner);
       }
     }
     if (roundEnv.processingOver() && !written && !entries.isEmpty()) {
@@ -84,23 +84,24 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
     return false;
   }
 
-  private void generateStaticBindings(TypeElement owner) {
+  private void generatePlatformBindings(TypeElement owner) {
     String binaryName = processingEnv.getElementUtils().getBinaryName(owner).toString();
-    if (!generatedStaticBindings.add(binaryName)) {
+    if (!generatedPlatformBindings.add(binaryName)) {
       return;
     }
     String ownerPackage =
         processingEnv.getElementUtils().getPackageOf(owner).getQualifiedName().toString();
-    Map<RuntimeTarget.Kind, List<StaticBindingModel>> bindings = new LinkedHashMap<>();
-    for (StaticRuntimeBinding binding : owner.getAnnotationsByType(StaticRuntimeBinding.class)) {
+    Map<TargetPlatform.Kind, List<PlatformBindingModel>> bindings = new LinkedHashMap<>();
+    for (PlatformBinding binding : owner.getAnnotationsByType(PlatformBinding.class)) {
       TypeMirror contract = typeMirror(binding::contract);
       TypeMirror implementation = typeMirror(binding::implementation);
       if (!processingEnv.getTypeUtils().isAssignable(implementation, contract)) {
-        error(owner, implementation + " is not assignable to static binding contract " + contract);
+        error(
+            owner, implementation + " is not assignable to platform binding contract " + contract);
         continue;
       }
       if (!binding.name().matches("[A-Za-z_$][A-Za-z0-9_$]*")) {
-        error(owner, "invalid static binding method name " + binding.name());
+        error(owner, "invalid platform binding method name " + binding.name());
         continue;
       }
       String instantiation = instantiationSpelling(owner, ownerPackage, implementation);
@@ -109,10 +110,10 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
       }
       bindings
           .computeIfAbsent(binding.target(), ignored -> new ArrayList<>())
-          .add(new StaticBindingModel(binding.name(), contract.toString(), instantiation));
+          .add(new PlatformBindingModel(binding.name(), contract.toString(), instantiation));
     }
-    for (Map.Entry<RuntimeTarget.Kind, List<StaticBindingModel>> target : bindings.entrySet()) {
-      writeStaticBindings(owner, target.getKey(), target.getValue());
+    for (Map.Entry<TargetPlatform.Kind, List<PlatformBindingModel>> target : bindings.entrySet()) {
+      writePlatformBindings(owner, target.getKey(), target.getValue());
     }
   }
 
@@ -133,19 +134,19 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
         || (type.getKind() != ElementKind.CLASS && type.getKind() != ElementKind.RECORD)) {
       error(
           owner,
-          "static binding implementation " + implementation + " must be a non-abstract class");
+          "platform binding implementation " + implementation + " must be a non-abstract class");
       return null;
     }
     if (type.getModifiers().contains(Modifier.ABSTRACT)) {
       error(
           owner,
-          "static binding implementation " + implementation + " must be a non-abstract class");
+          "platform binding implementation " + implementation + " must be a non-abstract class");
       return null;
     }
     if (type.getNestingKind().isNested() && !type.getModifiers().contains(Modifier.STATIC)) {
       error(
           owner,
-          "static binding implementation "
+          "platform binding implementation "
               + implementation
               + " must be a static nested class to be constructed");
       return null;
@@ -153,7 +154,7 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
     if (!isAccessibleFrom(type, ownerPackage)) {
       error(
           owner,
-          "static binding implementation "
+          "platform binding implementation "
               + implementation
               + " is not accessible from "
               + (ownerPackage.isEmpty() ? "the default package" : ownerPackage));
@@ -168,7 +169,7 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
                         && isAccessibleFrom(constructor, ownerPackage))) {
       error(
           owner,
-          "static binding implementation "
+          "platform binding implementation "
               + implementation
               + " must declare an accessible no-argument constructor");
       return null;
@@ -201,14 +202,14 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
     return true;
   }
 
-  private void writeStaticBindings(
-      TypeElement owner, RuntimeTarget.Kind target, List<StaticBindingModel> bindings) {
+  private void writePlatformBindings(
+      TypeElement owner, TargetPlatform.Kind target, List<PlatformBindingModel> bindings) {
     String packageName =
         processingEnv.getElementUtils().getPackageOf(owner).getQualifiedName().toString();
-    String targetName = target == RuntimeTarget.Kind.JVM ? "Jvm" : "TeaVm";
+    String targetName = target == TargetPlatform.Kind.JVM ? "Jvm" : "TeaVm";
     String simpleName = owner.getSimpleName() + targetName + "Bindings";
     String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
-    bindings.sort(Comparator.comparing(StaticBindingModel::name));
+    bindings.sort(Comparator.comparing(PlatformBindingModel::name));
     Set<String> names = new java.util.HashSet<>();
     try (Writer writer =
         processingEnv.getFiler().createSourceFile(qualifiedName, owner).openWriter()) {
@@ -218,9 +219,9 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
       writer.write("/** Generated CDI-independent bindings for " + target + ". */\n");
       writer.write("public final class " + simpleName + " {\n");
       writer.write("  private " + simpleName + "() {}\n\n");
-      for (StaticBindingModel binding : bindings) {
+      for (PlatformBindingModel binding : bindings) {
         if (!names.add(binding.name())) {
-          error(owner, "duplicate " + target + " static binding method " + binding.name());
+          error(owner, "duplicate " + target + " platform binding method " + binding.name());
           continue;
         }
         writer.write(
@@ -243,7 +244,7 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
   private TypeMirror typeMirror(TypeSupplier supplier) {
     try {
       supplier.get();
-      throw new IllegalStateException("Static binding type did not provide a mirror");
+      throw new IllegalStateException("Platform binding type did not provide a mirror");
     } catch (MirroredTypeException mirrored) {
       return mirrored.getTypeMirror();
     }
@@ -252,10 +253,10 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
   private void error(Element element, String message) {
     processingEnv
         .getMessager()
-        .printMessage(Diagnostic.Kind.ERROR, "SARTO-STATIC-BINDING: " + message, element);
+        .printMessage(Diagnostic.Kind.ERROR, "SARTO-PLATFORM-BINDING: " + message, element);
   }
 
-  private void collect(Element element, RuntimeTarget.Kind target) {
+  private void collect(Element element, TargetPlatform.Kind target) {
     EntryKey key;
     if (element instanceof PackageElement packageElement) {
       key = new EntryKey(EntryKind.PACKAGE, packageElement.getQualifiedName().toString());
@@ -285,17 +286,17 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
           .getMessager()
           .printMessage(
               Diagnostic.Kind.ERROR,
-              "SARTO-TARGET-INDEX: unsupported @RuntimeTarget element " + element.getKind(),
+              "SARTO-TARGET-INDEX: unsupported @TargetPlatform element " + element.getKind(),
               element);
       return;
     }
-    RuntimeTarget.Kind previous = entries.putIfAbsent(key, target);
+    TargetPlatform.Kind previous = entries.putIfAbsent(key, target);
     if (key.kind() == EntryKind.METHOD || key.kind() == EntryKind.MEMBER) {
       processingEnv
           .getMessager()
           .printMessage(
               Diagnostic.Kind.NOTE,
-              "SARTO-TARGET-INDEX: @RuntimeTarget on methods and fields is not supported and"
+              "SARTO-TARGET-INDEX: @TargetPlatform on methods and fields is not supported and"
                   + " has no effect; move the member to a target-owned class",
               element);
     }
@@ -312,10 +313,10 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
   private void writeIndex() {
     written = true;
     String origin = processingEnv.getOptions().getOrDefault(ORIGIN_OPTION, "current-compilation");
-    List<Map.Entry<EntryKey, RuntimeTarget.Kind>> sorted = new ArrayList<>(entries.entrySet());
+    List<Map.Entry<EntryKey, TargetPlatform.Kind>> sorted = new ArrayList<>(entries.entrySet());
     sorted.sort(
         Comparator.comparing(
-                (Map.Entry<EntryKey, RuntimeTarget.Kind> entry) -> entry.getKey().kind())
+                (Map.Entry<EntryKey, TargetPlatform.Kind> entry) -> entry.getKey().kind())
             .thenComparing(entry -> entry.getKey().name()));
     try (Writer writer =
         processingEnv
@@ -326,7 +327,7 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
       writer.write("origin=" + encoded(origin) + "\n");
       writer.write("entries=" + sorted.size() + "\n");
       for (int i = 0; i < sorted.size(); i++) {
-        Map.Entry<EntryKey, RuntimeTarget.Kind> entry = sorted.get(i);
+        Map.Entry<EntryKey, TargetPlatform.Kind> entry = sorted.get(i);
         String prefix = "entry." + i + ".";
         writer.write(prefix + "kind=" + entry.getKey().kind() + "\n");
         writer.write(prefix + "name=" + encoded(entry.getKey().name()) + "\n");
@@ -359,7 +360,7 @@ public final class RuntimeTargetProcessor extends AbstractProcessor {
 
   private record EntryKey(EntryKind kind, String name) {}
 
-  private record StaticBindingModel(String name, String contract, String instantiation) {}
+  private record PlatformBindingModel(String name, String contract, String instantiation) {}
 
   @FunctionalInterface
   private interface TypeSupplier {
