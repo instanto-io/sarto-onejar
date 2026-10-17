@@ -38,6 +38,9 @@ class JvmTargetPruningTransformerTest {
     assertFalse(transformer.jvmTargetClass("io.instanto.example.teavm.Browser"));
     assertTrue(transformer.jvmTargetClass("third.party.jvm.Provider"));
     assertTrue(transformer.jvmTargetClass("io.instanto.example.jvm.JreProvider"));
+    assertFalse(transformer.jvmTargetClass("io.instanto.example.PortableOuter"));
+    assertTrue(transformer.jvmTargetClass("io.instanto.example.PortableOuter$JvmInner"));
+    assertTrue(transformer.jvmTargetClass("io.instanto.example.PortableOuter$JvmInner$1"));
     assertFalse(transformer.jvmTargetClass("unindexed.jvm.Provider"));
   }
 }

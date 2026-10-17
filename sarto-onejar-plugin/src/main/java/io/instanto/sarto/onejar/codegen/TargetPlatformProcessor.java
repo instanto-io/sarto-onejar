@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
-import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedOptions;
@@ -49,13 +48,9 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
   static final String ORIGIN_OPTION = "sarto.target.origin";
 
   private final Map<EntryKey, TargetPlatform.Kind> entries = new LinkedHashMap<>();
+  private final Set<Element> indexOrigins = new java.util.LinkedHashSet<>();
   private final Set<String> generatedPlatformBindings = new java.util.LinkedHashSet<>();
   private boolean written;
-
-  @Override
-  public synchronized void init(ProcessingEnvironment processingEnvironment) {
-    super.init(processingEnvironment);
-  }
 
   @Override
   public SourceVersion getSupportedSourceVersion() {
@@ -63,7 +58,8 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
   }
 
   @Override
-  public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+  public synchronized boolean process(
+      Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
     for (Element element : roundEnv.getElementsAnnotatedWith(TargetPlatform.class)) {
       TargetPlatform target = element.getAnnotation(TargetPlatform.class);
       if (target != null) {
@@ -92,6 +88,7 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
     String ownerPackage =
         processingEnv.getElementUtils().getPackageOf(owner).getQualifiedName().toString();
     Map<TargetPlatform.Kind, List<PlatformBindingModel>> bindings = new LinkedHashMap<>();
+    Map<TargetPlatform.Kind, Set<String>> methodNames = new LinkedHashMap<>();
     for (PlatformBinding binding : owner.getAnnotationsByType(PlatformBinding.class)) {
       TypeMirror contract = typeMirror(binding::contract);
       TypeMirror implementation = typeMirror(binding::implementation);
@@ -106,6 +103,13 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
       }
       String instantiation = instantiationSpelling(owner, ownerPackage, implementation);
       if (instantiation == null) {
+        continue;
+      }
+      if (!methodNames
+          .computeIfAbsent(binding.target(), ignored -> new java.util.HashSet<>())
+          .add(binding.name())) {
+        error(
+            owner, "duplicate " + binding.target() + " platform binding method " + binding.name());
         continue;
       }
       bindings
@@ -210,7 +214,6 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
     String simpleName = owner.getSimpleName() + targetName + "Bindings";
     String qualifiedName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
     bindings.sort(Comparator.comparing(PlatformBindingModel::name));
-    Set<String> names = new java.util.HashSet<>();
     try (Writer writer =
         processingEnv.getFiler().createSourceFile(qualifiedName, owner).openWriter()) {
       if (!packageName.isEmpty()) {
@@ -220,10 +223,6 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
       writer.write("public final class " + simpleName + " {\n");
       writer.write("  private " + simpleName + "() {}\n\n");
       for (PlatformBindingModel binding : bindings) {
-        if (!names.add(binding.name())) {
-          error(owner, "duplicate " + target + " platform binding method " + binding.name());
-          continue;
-        }
         writer.write(
             "  public static "
                 + binding.contract()
@@ -290,6 +289,7 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
               element);
       return;
     }
+    indexOrigins.add(element);
     TargetPlatform.Kind previous = entries.putIfAbsent(key, target);
     if (key.kind() == EntryKind.METHOD || key.kind() == EntryKind.MEMBER) {
       processingEnv
@@ -312,7 +312,11 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
 
   private void writeIndex() {
     written = true;
-    String origin = processingEnv.getOptions().getOrDefault(ORIGIN_OPTION, "current-compilation");
+    String configuredOrigin = processingEnv.getOptions().get(ORIGIN_OPTION);
+    String origin =
+        configuredOrigin == null || configuredOrigin.isBlank()
+            ? "current-compilation"
+            : configuredOrigin.trim();
     List<Map.Entry<EntryKey, TargetPlatform.Kind>> sorted = new ArrayList<>(entries.entrySet());
     sorted.sort(
         Comparator.comparing(
@@ -321,7 +325,11 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
     try (Writer writer =
         processingEnv
             .getFiler()
-            .createResource(StandardLocation.CLASS_OUTPUT, "", INDEX_RESOURCE)
+            .createResource(
+                StandardLocation.CLASS_OUTPUT,
+                "",
+                INDEX_RESOURCE,
+                indexOrigins.toArray(Element[]::new))
             .openWriter()) {
       writer.write("format=1\n");
       writer.write("origin=" + encoded(origin) + "\n");

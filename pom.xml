@@ -44,7 +44,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>6.1.2</junit.version>
         <compile-testing.version>0.23.0</compile-testing.version>
-        <teavm.version>0.15.0</teavm.version>
+        <teavm.version>0.16.0</teavm.version>
     </properties>
 
     <modules>

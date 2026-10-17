@@ -226,6 +226,32 @@ class TargetPlatformProcessorTest {
         .hadErrorContaining("must be a static nested class");
   }
 
+  @Test
+  void rejectsDuplicatePlatformBindingMethodNamesForSameTarget() {
+    Compilation duplicateMethod =
+        compileBindings(
+            """
+            package example;
+            import io.instanto.sarto.onejar.TargetPlatform;
+            import io.instanto.sarto.onejar.PlatformBinding;
+            final class JvmPort implements Port {}
+            @PlatformBinding(
+                name = "port",
+                contract = Port.class,
+                implementation = JvmPort.class,
+                target = TargetPlatform.Kind.JVM)
+            @PlatformBinding(
+                name = "port",
+                contract = Port.class,
+                implementation = JvmPort.class,
+                target = TargetPlatform.Kind.JVM)
+            final class DuplicateBindings {}
+            """);
+    assertThat(duplicateMethod.status()).isEqualTo(Compilation.Status.FAILURE);
+    CompilationSubject.assertThat(duplicateMethod)
+        .hadErrorContaining("duplicate JVM platform binding method port");
+  }
+
   private static Compilation compileBindings(String ownerSource) {
     return Compiler.javac()
         .withProcessors(new TargetPlatformProcessor())

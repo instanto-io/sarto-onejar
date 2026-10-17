@@ -14,9 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Set;
 
 /** Build-JVM reader for the versioned target indexes on TeaVM's compilation classpath. */
 final class TargetPlatformIndex {
@@ -32,13 +30,13 @@ final class TargetPlatformIndex {
 
   static TargetPlatformIndex load(ClassLoader preferredLoader) {
     try {
-      Set<URL> resources = new LinkedHashSet<>();
+      Map<String, URL> resources = new LinkedHashMap<>();
       collect(resources, preferredLoader);
       collect(resources, TargetPlatformIndex.class.getClassLoader());
       collect(resources, Thread.currentThread().getContextClassLoader());
       Map<String, TargetEntry> classes = new LinkedHashMap<>();
       Map<String, TargetEntry> packages = new LinkedHashMap<>();
-      for (URL resource : resources) {
+      for (URL resource : resources.values()) {
         try (InputStream input = resource.openStream()) {
           add(input, resource.toString(), classes, packages);
         }
@@ -51,11 +49,10 @@ final class TargetPlatformIndex {
 
   boolean isJvm(String className) {
     TargetEntry direct = classes.get(className);
-    if (direct == null) {
-      int nested = className.indexOf('$');
-      if (nested > 0) {
-        direct = classes.get(className.substring(0, nested));
-      }
+    for (int nested = className.lastIndexOf('$');
+        direct == null && nested > 0;
+        nested = className.lastIndexOf('$', nested - 1)) {
+      direct = classes.get(className.substring(0, nested));
     }
     if (direct != null) {
       return direct.target() == Target.JVM;
@@ -65,13 +62,14 @@ final class TargetPlatformIndex {
     return packageEntry != null && packageEntry.target() == Target.JVM;
   }
 
-  private static void collect(Set<URL> resources, ClassLoader loader) throws IOException {
+  private static void collect(Map<String, URL> resources, ClassLoader loader) throws IOException {
     if (loader == null) {
       return;
     }
     Enumeration<URL> found = loader.getResources(RESOURCE);
     while (found.hasMoreElements()) {
-      resources.add(found.nextElement());
+      URL url = found.nextElement();
+      resources.putIfAbsent(url.toExternalForm(), url);
     }
   }
 
