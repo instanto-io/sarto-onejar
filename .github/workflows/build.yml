@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -35,6 +37,20 @@ jobs:
         env:
           FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
           FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN }}
+
+      - name: SonarQube Quality Gate
+        if: env.SONAR_TOKEN != ''
+        run: |
+          set -euo pipefail
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          ./mvnw --settings .github/maven-settings.xml --batch-mode --no-transfer-progress \
+            sonar:sonar \
+            -Dsonar.projectKey="$repo_name" \
+            -Dsonar.projectName="$repo_name" \
+            -Dsonar.qualitygate.wait=true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonar.instanto.io
 
       - name: Upload test reports
         if: always()

@@ -47,6 +47,8 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
   public static final String INDEX_RESOURCE = "META-INF/sarto/target-platforms.properties";
   static final String ORIGIN_OPTION = "sarto.target.origin";
 
+  private static final String PLATFORM_BINDING_IMPL = "platform binding implementation ";
+
   private final Map<EntryKey, TargetPlatform.Kind> entries = new LinkedHashMap<>();
   private final Set<Element> indexOrigins = new java.util.LinkedHashSet<>();
   private final Set<String> generatedPlatformBindings = new java.util.LinkedHashSet<>();
@@ -90,35 +92,42 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
     Map<TargetPlatform.Kind, List<PlatformBindingModel>> bindings = new LinkedHashMap<>();
     Map<TargetPlatform.Kind, Set<String>> methodNames = new LinkedHashMap<>();
     for (PlatformBinding binding : owner.getAnnotationsByType(PlatformBinding.class)) {
-      TypeMirror contract = typeMirror(binding::contract);
-      TypeMirror implementation = typeMirror(binding::implementation);
-      if (!processingEnv.getTypeUtils().isAssignable(implementation, contract)) {
-        error(
-            owner, implementation + " is not assignable to platform binding contract " + contract);
-        continue;
+      PlatformBindingModel model = processBinding(owner, ownerPackage, binding, methodNames);
+      if (model != null) {
+        bindings.computeIfAbsent(binding.target(), ignored -> new ArrayList<>()).add(model);
       }
-      if (!binding.name().matches("[A-Za-z_$][A-Za-z0-9_$]*")) {
-        error(owner, "invalid platform binding method name " + binding.name());
-        continue;
-      }
-      String instantiation = instantiationSpelling(owner, ownerPackage, implementation);
-      if (instantiation == null) {
-        continue;
-      }
-      if (!methodNames
-          .computeIfAbsent(binding.target(), ignored -> new java.util.HashSet<>())
-          .add(binding.name())) {
-        error(
-            owner, "duplicate " + binding.target() + " platform binding method " + binding.name());
-        continue;
-      }
-      bindings
-          .computeIfAbsent(binding.target(), ignored -> new ArrayList<>())
-          .add(new PlatformBindingModel(binding.name(), contract.toString(), instantiation));
     }
     for (Map.Entry<TargetPlatform.Kind, List<PlatformBindingModel>> target : bindings.entrySet()) {
       writePlatformBindings(owner, target.getKey(), target.getValue());
     }
+  }
+
+  private PlatformBindingModel processBinding(
+      TypeElement owner,
+      String ownerPackage,
+      PlatformBinding binding,
+      Map<TargetPlatform.Kind, Set<String>> methodNames) {
+    TypeMirror contract = typeMirror(binding::contract);
+    TypeMirror implementation = typeMirror(binding::implementation);
+    if (!processingEnv.getTypeUtils().isAssignable(implementation, contract)) {
+      error(owner, implementation + " is not assignable to platform binding contract " + contract);
+      return null;
+    }
+    if (!binding.name().matches("[A-Za-z_$][A-Za-z0-9_$]*")) {
+      error(owner, "invalid platform binding method name " + binding.name());
+      return null;
+    }
+    String instantiation = instantiationSpelling(owner, ownerPackage, implementation);
+    if (instantiation == null) {
+      return null;
+    }
+    if (!methodNames
+        .computeIfAbsent(binding.target(), ignored -> new java.util.HashSet<>())
+        .add(binding.name())) {
+      error(owner, "duplicate " + binding.target() + " platform binding method " + binding.name());
+      return null;
+    }
+    return new PlatformBindingModel(binding.name(), contract.toString(), instantiation);
   }
 
   /**
@@ -136,21 +145,17 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
     Element element = processingEnv.getTypeUtils().asElement(implementation);
     if (!(element instanceof TypeElement type)
         || (type.getKind() != ElementKind.CLASS && type.getKind() != ElementKind.RECORD)) {
-      error(
-          owner,
-          "platform binding implementation " + implementation + " must be a non-abstract class");
+      error(owner, PLATFORM_BINDING_IMPL + implementation + " must be a non-abstract class");
       return null;
     }
     if (type.getModifiers().contains(Modifier.ABSTRACT)) {
-      error(
-          owner,
-          "platform binding implementation " + implementation + " must be a non-abstract class");
+      error(owner, PLATFORM_BINDING_IMPL + implementation + " must be a non-abstract class");
       return null;
     }
     if (type.getNestingKind().isNested() && !type.getModifiers().contains(Modifier.STATIC)) {
       error(
           owner,
-          "platform binding implementation "
+          PLATFORM_BINDING_IMPL
               + implementation
               + " must be a static nested class to be constructed");
       return null;
@@ -158,7 +163,7 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
     if (!isAccessibleFrom(type, ownerPackage)) {
       error(
           owner,
-          "platform binding implementation "
+          PLATFORM_BINDING_IMPL
               + implementation
               + " is not accessible from "
               + (ownerPackage.isEmpty() ? "the default package" : ownerPackage));
@@ -173,7 +178,7 @@ public final class TargetPlatformProcessor extends AbstractProcessor {
                         && isAccessibleFrom(constructor, ownerPackage))) {
       error(
           owner,
-          "platform binding implementation "
+          PLATFORM_BINDING_IMPL
               + implementation
               + " must declare an accessible no-argument constructor");
       return null;
