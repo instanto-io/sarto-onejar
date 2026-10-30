@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   packages: write
+  security-events: write
 
 jobs:
   build:
@@ -51,6 +52,14 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonar.instanto.io
+
+      - name: Publish quality summary
+        if: always()
+        continue-on-error: true
+        uses: instanto-io/instanto-poms/.github/actions/quality-summary@main
+        with:
+          sonar-project-key: sarto-onejar
+          sonar-token: ${{ secrets.SONAR_READ_TOKEN || secrets.SONAR_TOKEN }}
 
       - name: Upload test reports
         if: always()
