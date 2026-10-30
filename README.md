@@ -127,6 +127,12 @@ JAR do not need to list its packages again. Use the same OneJar version for the 
 
 The [module POMs](pom.xml) show the wiring.
 
+## Quality
+
+SpotBugs runs on every build. High-priority findings fail the build, and all findings are published to [code scanning](https://github.com/instanto-io/sarto-onejar/security/code-scanning). SonarQube analysis runs on `main` against the organisation's private instance; maintainers see the gate, coverage and issue counts in the workflow summary. The Sonar quality gate is advisory, so a snapshot still publishes when only that gate fails.
+
+See [Actions](https://github.com/instanto-io/sarto-onejar/actions) for the latest verification and quality summary.
+
 ## License
 
 Sarto OneJar is available under the [Apache License, Version 2.0](LICENSE).
